@@ -28,7 +28,7 @@ def get_tasks(url: str, cookie: str=None) -> dict:
         raise SystemExit(e)
 
 
-def get_desc(tasks: dict) -> dict:
+def get_desc(tasks: dict) -> list:
     """
     blblab
 
@@ -37,17 +37,20 @@ def get_desc(tasks: dict) -> dict:
     Return:
     """
 
-    room_desc = {}
+    room_desc = []
 
     for task in tasks:
         title = task["taskTitle"]
         desc = md(task["taskDesc"])
 
-        room_desc.update({f"{title}": desc})
+        room_desc.append({
+            "title": title,
+            "desc": desc
+        })
 
     return room_desc
 
-def get_room_info(url: str, cookie: str) -> dict:
+def get_room_info(url: str, cookie: str) -> list:
     """
     blblab
 

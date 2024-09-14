@@ -1,50 +1,60 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import asyncio
 import os
-from ollama import Client
+from ollama import AsyncClient
 from get_room_info import get_room_info
 
 THM_API = "https://tryhackme.com/api/tasks/"
 
-def _connect(url: str="http://localhost:11434") -> Client:
+def _connect(url: str="http://localhost:11434") -> AsyncClient:
     try:
-        return Client(host = url)
+        return AsyncClient(host = url)
     except Exception as e:
         print("Seems like your Ollama client is not running?")
         raise SystemExit(e)
 
-def summarize_tasks(client: Client, text: str, model: str) -> dict:
-    prompt = f"""
-    Please provide a concise summary of the triple backqouted text. 
-    Format the output as follows:
+async def summarize_tasks(client: AsyncClient, tasks: dict, model: str, stream: bool) -> None:
+    
+    if not tasks:
+        raise SystemExit("No tasks to summarize! Exiting...")
 
-    Summary:
-    short summary of a task
+    messages = build_messages(tasks)
 
-    Key Takeaways:
-    succinct bullet point list of key takeaways
+    if stream:
+        for message in messages:
+            async for part in await client.chat(model=model, messages=[message], stream=stream):
+                print(part["message"]["content"], end="", flush=True)
+            print("\n\n" + "=" * 50 + "\n")
+    else:
+        response = await client.chat(model=model, messages=messages)
+        print(response["message"]["content"])
 
-    ```{text}```
-    """
+def build_messages(tasks: dict) -> list:
+    messages = []
 
-    message = {
-        "role": "user",
-        "content": prompt
-    }
+    for task in tasks:
+        user_prompt = {
+            "role": "user",
+            "content": f"""
+You are an expert summarizer capable of understanding the content and summarinzing aptly, keeping most valid information intact.
+Develop a summarizer that efficiently condenses the text into a concise summary.
+The summarizer should capture essential information and convey the main points clearly and accurately.
+The summarizer must be able to handle content related to Cyber Security and Penetration Testing content.
+It should prioritize key facts, arguments, and conclusions while maintaining the integrity and tone of the original text.
+Focus on clarity, brevity, and relevance to ensure the summary is both informative and readable.
 
-    resp = client.chat(model = model, messages = [message,])
-    print(type(resp))
-    return resp
+Your task is to summarize this online TryHackMe course description. Highlight the main learning objectives, and course outline.
+The text is as follows:
+Title: {task["title"]}
 
-def build_tasks(url: str, cookie: str) -> list:
-    allTasks = get_room_info(url, cookie)
+{task["desc"]}
+"""
+        }
+        messages.append(user_prompt)
 
-    tasks = []
-    for title, desc in allTasks.items():
-        tasks.append("## Task '{}'\n{}".format(title, desc))
-
-    return tasks
+    return messages
 
 def main(parser) -> None:
     args = parser.parse_args()
@@ -55,11 +65,8 @@ def main(parser) -> None:
     THM_URL = THM_API + args.room 
 
     client = _connect(OLLAMA_URL)
-    tasks = build_tasks(THM_URL, COOKIE)
-    for text in tasks:
-        summarized = summarize_tasks(client, text, MODEL)
-        print(summarized["message"]["content"])
-        print("\n" + "=" * 50 + "\n")
+    tasks = get_room_info(THM_URL, COOKIE)
+    asyncio.run(summarize_tasks(client, tasks, MODEL, args.stream))
 
 if __name__ == "__main__":
     from dotenv import load_dotenv
@@ -69,5 +76,6 @@ if __name__ == "__main__":
     
     parser = argparse.ArgumentParser()
     parser.add_argument("-r", "--room", help="Name of TryHackMe room to summarize.", type=str, required=True)
+    parser.add_argument("-s", "--stream", help="", type=bool, default=True)
 
     main(parser)
